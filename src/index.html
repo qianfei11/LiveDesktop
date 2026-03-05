@@ -200,6 +200,14 @@ main::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
   background:var(--a,#a78bfa);color:#fff;flex-shrink:0;
 }
 .live-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+/* Motion photo badge (Android) — teal/green tones */
+.motion-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:9px;font-weight:800;letter-spacing:.7px;
+  padding:3px 8px;border-radius:20px;
+  background:linear-gradient(130deg,#2DD4BF,#4ADE80);color:#fff;flex-shrink:0;
+}
+.motion-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
 
 /* loading shimmer on card */
 .card.loading img{filter:brightness(.92)}
@@ -326,7 +334,10 @@ body.drag::after{
   <div id="emptyState">
     <div class="e-glyph">✦</div>
     <div class="e-title">LivePhoto Viewer</div>
-    <p class="e-sub">Open a folder containing Live Photos — same-name image + video pairs, e.g. <code>IMG_001.jpg</code> + <code>IMG_001.mp4</code></p>
+    <p class="e-sub">Open a folder containing Live Photos or Motion Photos.<br>
+      Supports Apple Live Photos (<code>.heic/.jpg + .mov</code>),
+      Google Motion Photos (<code>MVIMG_*.jpg</code>, <code>PXL_*.MP.jpg</code>),
+      Samsung Motion Photos, and any same-name image + video pair.</p>
     <button class="btn-open" onclick="openFolder()" style="margin-top:6px">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       Open Folder
@@ -403,7 +414,16 @@ async function loadDir(dir) {
     $('viewPills').style.display = 'flex';
     renderGrid(photos);
     updateStats();
-    toast(photos.length ? `Found ${photos.length} Live Photo${photos.length>1?'s':''}` : 'No Live Photos found in this folder', photos.length?'':'err');
+    if (photos.length) {
+      const liveCount   = photos.filter(p => p.photo_type === 'live').length;
+      const motionCount = photos.length - liveCount;
+      const parts = [];
+      if (liveCount)   parts.push(`${liveCount} Live Photo${liveCount!==1?'s':''}`);
+      if (motionCount) parts.push(`${motionCount} Motion Photo${motionCount!==1?'s':''}`);
+      toast('Found ' + parts.join(' + '));
+    } else {
+      toast('No Live Photos or Motion Photos found in this folder', 'err');
+    }
   } catch(e) { toast('Error: '+e,'err'); showEmpty(); }
 }
 
@@ -426,7 +446,7 @@ function renderGrid(photos) {
       <img src="${convertFileSrc(p.image_path)}" alt="${esc(p.display_name||p.name)}" loading="lazy" draggable="false">
       <div class="card-info">
         <span class="card-name">${esc(p.display_name||p.name)}</span>
-        <span class="live-badge">LIVE</span>
+        ${badge(p.photo_type)}
       </div>
     </div>`).join('');
   g.querySelectorAll('.card').forEach(c => {
@@ -604,9 +624,16 @@ document.addEventListener('drop', async e => {
 
 /* ── Helpers ── */
 function updateStats() {
-  $('statsText').textContent = shown.length===all.length
-    ? `${all.length} Live Photo${all.length!==1?'s':''}`
-    : `${shown.length} / ${all.length} Live Photos`;
+  const total = all.length;
+  const live   = all.filter(p => p.photo_type === 'live').length;
+  const motion = total - live;
+  let summary;
+  if (live && motion)       summary = `${live} Live + ${motion} Motion`;
+  else if (live)            summary = `${live} Live Photo${live!==1?'s':''}`;
+  else                      summary = `${motion} Motion Photo${motion!==1?'s':''}`;
+  $('statsText').textContent = shown.length === total
+    ? summary
+    : `${shown.length} / ${total} · ${summary}`;
 }
 function toast(msg, type) {
   const t = document.createElement('div');
@@ -620,6 +647,17 @@ function $(id) { return document.getElementById(id); }
 function show(id) { $(id).style.display=''; }
 function hide(id) { $(id).style.display='none'; }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+/* Return the appropriate badge HTML based on photo_type */
+function badge(type) {
+  switch (type) {
+    case 'live':    return '<span class="live-badge">LIVE</span>';
+    case 'google':  return '<span class="motion-badge">MOTION</span>';
+    case 'samsung': return '<span class="motion-badge">MOTION</span>';
+    case 'motion':  return '<span class="motion-badge">MOTION</span>';
+    default:        return '<span class="live-badge">LIVE</span>';
+  }
+}
 </script>
 </body>
 </html>
