@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LivePhoto</title>
+<style>
+/* ── Reset ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+
+/* ── Tokens ── */
+:root{
+  --bg:#F2F3FF;
+  --surface:#FFFFFF;
+  --text:#18181b;
+  --text2:#6b7280;
+  --text3:#a1a1aa;
+  --radius:18px;
+  --nav-h:58px;
+  --bar-h:38px;
+  --shadow:0 2px 12px rgba(80,80,180,.07);
+  --shadow-hover:0 16px 48px rgba(80,80,180,.16);
+  --trans:.28s cubic-bezier(.34,1.56,.64,1);
+}
+
+/* ── Base ── */
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Ubuntu,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  display:flex;flex-direction:column;
+  user-select:none;
+}
+
+/* ── Animated BG spots ── */
+#orbs{position:fixed;inset:0;pointer-events:none;z-index:0;overflow:hidden}
+.orb{position:absolute;border-radius:50%;filter:blur(70px);animation:drift 22s ease-in-out infinite}
+.o1{width:600px;height:600px;background:radial-gradient(circle,rgba(167,139,250,.18),transparent);top:-180px;left:-120px}
+.o2{width:500px;height:500px;background:radial-gradient(circle,rgba(34,211,238,.15),transparent);bottom:-150px;right:-100px;animation-delay:-8s}
+.o3{width:380px;height:380px;background:radial-gradient(circle,rgba(251,113,133,.13),transparent);top:40%;left:55%;animation-delay:-15s}
+@keyframes drift{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(24px,-20px) scale(1.06)}66%{transform:translate(-16px,16px) scale(.94)}}
+
+/* ── Nav ── */
+nav{
+  position:relative;z-index:20;height:var(--nav-h);
+  display:flex;align-items:center;gap:10px;padding:0 18px;
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(24px);
+  border-bottom:1px solid rgba(0,0,0,.06);
+  flex-shrink:0;
+}
+.logo{display:flex;align-items:center;gap:9px;text-decoration:none}
+.logo-mark{
+  width:34px;height:34px;border-radius:10px;flex-shrink:0;
+  background:linear-gradient(135deg,#a78bfa,#38bdf8);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 12px rgba(167,139,250,.4);
+  font-size:17px;color:#fff;font-weight:900;letter-spacing:-.5px;
+}
+.logo-name{font-size:15px;font-weight:800;letter-spacing:-.4px;color:var(--text)}
+.logo-name em{font-style:normal;background:linear-gradient(90deg,#a78bfa,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+
+.sp{flex:1}
+
+/* search */
+.srch{
+  display:flex;align-items:center;gap:7px;
+  background:rgba(0,0,0,.04);border:1.5px solid rgba(0,0,0,.07);
+  border-radius:10px;padding:5px 12px;min-width:190px;
+  transition:border-color .18s;
+}
+.srch:focus-within{border-color:#a78bfa}
+.srch svg{color:var(--text3);flex-shrink:0}
+#searchInput{background:none;border:none;outline:none;font-size:13px;color:var(--text);width:100%}
+#searchInput::placeholder{color:var(--text3)}
+
+/* pills */
+.pills{display:flex;gap:2px;padding:3px;background:rgba(0,0,0,.04);border:1.5px solid rgba(0,0,0,.07);border-radius:10px}
+.pill{padding:4px 11px;border-radius:7px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;display:flex;align-items:center;gap:5px;transition:background .15s,color .15s}
+.pill.on{background:#a78bfa;color:#fff}
+
+/* open button */
+.btn-open{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 16px;border-radius:var(--radius);
+  font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;
+  border:none;
+  background:linear-gradient(130deg,#a78bfa,#38bdf8);
+  color:#fff;
+  box-shadow:0 3px 12px rgba(167,139,250,.35);
+  transition:all .22s;
+}
+.btn-open:hover{transform:translateY(-2px);box-shadow:0 6px 22px rgba(167,139,250,.5)}
+.btn-open:active{transform:translateY(0)}
+
+/* ── Stats bar ── */
+#statsBar{
+  position:relative;z-index:15;height:var(--bar-h);
+  display:none;align-items:center;gap:10px;
+  padding:0 18px;
+  background:rgba(255,255,255,.7);backdrop-filter:blur(10px);
+  border-bottom:1px solid rgba(0,0,0,.05);flex-shrink:0;
+}
+.chip{
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:800;letter-spacing:.8px;
+  padding:2px 9px;border-radius:20px;
+  background:linear-gradient(130deg,#fb7185,#a78bfa);color:#fff;
+}
+.chip::before{content:'';width:5px;height:5px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.5)}}
+#statsText{font-size:12px;color:var(--text2)}
+#folderPath{font-size:10px;font-family:monospace;color:var(--text3);margin-left:auto;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Scroll area ── */
+main{position:relative;z-index:5;flex:1;overflow-y:auto;padding:20px;
+  scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.1) transparent}
+main::-webkit-scrollbar{width:5px}
+main::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
+
+/* ── Empty state ── */
+#emptyState{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;min-height:430px;text-align:center}
+.e-glyph{
+  width:108px;height:108px;border-radius:30px;
+  background:linear-gradient(135deg,rgba(167,139,250,.12),rgba(56,189,248,.1));
+  border:1.5px solid rgba(167,139,250,.2);
+  display:flex;align-items:center;justify-content:center;font-size:50px;
+  animation:bob 4s ease-in-out infinite;
+}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.e-title{
+  font-size:26px;font-weight:800;letter-spacing:-.5px;
+  background:linear-gradient(130deg,#a78bfa,#38bdf8 60%,#4ade80);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.e-sub{font-size:13px;color:var(--text2);max-width:300px;line-height:1.7}
+.e-hint{font-size:11px;color:var(--text3);margin-top:4px}
+
+/* ── Photo grid ── */
+#photoGrid{display:none;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
+#photoGrid.list-view{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+
+/* ── Chameleon palette (10 vivid hues) ── */
+.c0{--a:#FF6B6B;--ag:rgba(255,107,107,.22)}
+.c1{--a:#22D3EE;--ag:rgba(34,211,238,.2)}
+.c2{--a:#86EFAC;--ag:rgba(134,239,172,.22)}
+.c3{--a:#A78BFA;--ag:rgba(167,139,250,.22)}
+.c4{--a:#FCD34D;--ag:rgba(252,211,77,.25)}
+.c5{--a:#FB7185;--ag:rgba(251,113,133,.22)}
+.c6{--a:#2DD4BF;--ag:rgba(45,212,191,.2)}
+.c7{--a:#818CF8;--ag:rgba(129,140,248,.22)}
+.c8{--a:#FB923C;--ag:rgba(251,146,60,.22)}
+.c9{--a:#4ADE80;--ag:rgba(74,222,128,.22)}
+
+/* ── Card ── */
+.card{
+  position:relative;
+  background:var(--surface);
+  border-radius:var(--radius);
+  overflow:hidden;
+  box-shadow:var(--shadow);
+  border-top:3.5px solid var(--a,#a78bfa);
+  cursor:pointer;
+  aspect-ratio:4/5;
+  transition:transform var(--trans),box-shadow var(--trans);
+}
+.card::after{
+  content:'';position:absolute;inset:-1px;border-radius:calc(var(--radius)+1px);
+  background:var(--a,#a78bfa);opacity:0;z-index:-1;
+  filter:blur(22px);transition:opacity .3s;
+}
+.card:hover{transform:translateY(-8px) scale(1.018);box-shadow:var(--shadow-hover)}
+.card:hover::after{opacity:.28}
+
+/* thumbnail img */
+.card img{
+  position:absolute;inset:0;width:100%;height:100%;
+  object-fit:cover;
+  /* leave room for bottom strip */
+  bottom:44px;height:calc(100% - 44px);
+  transition:transform .5s ease;
+}
+.card:hover img{transform:scale(1.04)}
+
+/* bottom info strip */
+.card-info{
+  position:absolute;bottom:0;left:0;right:0;
+  height:44px;
+  background:var(--surface);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 10px;gap:6px;
+  border-top:1px solid rgba(0,0,0,.04);
+}
+.card-name{font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.live-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:9px;font-weight:800;letter-spacing:.7px;
+  padding:3px 8px;border-radius:20px;
+  background:var(--a,#a78bfa);color:#fff;flex-shrink:0;
+}
+.live-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+
+/* loading shimmer on card */
+.card.loading img{filter:brightness(.92)}
+.card.loading .card-info::after{
+  content:'Loading…';font-size:9px;color:var(--a);font-weight:700;
+  margin-left:auto;animation:blink 1s infinite;
+}
+
+/* skeleton */
+.skel{aspect-ratio:4/5;border-radius:var(--radius);
+  background:linear-gradient(90deg,rgba(0,0,0,.04) 0%,rgba(0,0,0,.09) 50%,rgba(0,0,0,.04) 100%);
+  background-size:200% 100%;animation:shimmer 1.6s ease-in-out infinite}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* drag overlay */
+body.drag::after{
+  content:'Drop folder here';position:fixed;inset:14px;z-index:500;
+  background:rgba(167,139,250,.08);border:2px dashed rgba(167,139,250,.6);
+  border-radius:22px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;font-weight:700;color:rgba(167,139,250,.9);pointer-events:none;
+}
+
+/* ── Modal ── */
+#modal{
+  display:none;position:fixed;inset:0;z-index:900;
+  background:rgba(0,0,0,.65);backdrop-filter:blur(24px);
+  align-items:center;justify-content:center;
+  animation:fadein .2s ease;
+}
+#modal.open{display:flex}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+
+.modal-wrap{
+  position:relative;
+  display:flex;flex-direction:column;align-items:center;gap:14px;
+  max-width:92vw;
+}
+#mClose{
+  position:absolute;top:-14px;right:-14px;
+  width:34px;height:34px;border-radius:50%;
+  background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);
+  color:#fff;font-size:14px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:background .18s;z-index:10;
+}
+#mClose:hover{background:rgba(255,255,255,.28)}
+
+.modal-frame{
+  position:relative;border-radius:16px;overflow:hidden;
+  box-shadow:0 40px 100px rgba(0,0,0,.8);
+  display:inline-flex;max-width:86vw;max-height:76vh;
+}
+#mImg{display:block;max-width:86vw;max-height:76vh;object-fit:contain;border-radius:16px}
+
+/* bottom bar */
+.modal-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
+.m-name{font-size:13px;color:rgba(255,255,255,.65)}
+.m-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:7px 16px;border-radius:10px;font-size:12px;font-weight:700;
+  cursor:pointer;border:none;transition:all .2s;white-space:nowrap;
+}
+.m-btn-anim{background:rgba(167,139,250,.25);border:1px solid rgba(167,139,250,.5);color:#e0d9ff}
+.m-btn-anim:hover{background:rgba(167,139,250,.45)}
+.m-btn-play{background:linear-gradient(130deg,#a78bfa,#38bdf8);color:#fff;box-shadow:0 3px 14px rgba(167,139,250,.4)}
+.m-btn-play:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(167,139,250,.55)}
+
+/* ── Toast ── */
+#toasts{position:fixed;bottom:18px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:8px}
+.toast{
+  padding:10px 16px;border-radius:12px;
+  background:rgba(255,255,255,.95);border:1px solid rgba(0,0,0,.08);
+  backdrop-filter:blur(20px);font-size:12px;font-weight:500;color:var(--text);
+  box-shadow:0 6px 24px rgba(0,0,0,.12);
+  animation:tslide .3s cubic-bezier(.34,1.56,.64,1);
+}
+.toast.err{background:#fff0f0;border-color:rgba(239,68,68,.2);color:#dc2626}
+@keyframes tslide{from{transform:translateX(110%);opacity:0}to{transform:none;opacity:1}}
+</style>
+</head>
+<body>
+
+<div id="orbs">
+  <div class="orb o1"></div><div class="orb o2"></div><div class="orb o3"></div>
+</div>
+
+<!-- Nav -->
+<nav>
+  <a class="logo" href="#">
+    <div class="logo-mark">✦</div>
+    <span class="logo-name">Live<em>Photo</em></span>
+  </a>
+  <div class="sp"></div>
+
+  <div class="srch" id="searchWrap" style="display:none">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input id="searchInput" type="text" placeholder="Search…" autocomplete="off">
+  </div>
+
+  <div class="pills" id="viewPills" style="display:none">
+    <button class="pill on" id="pillGrid" onclick="setView('grid')">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="6" height="6" rx="1"/><rect x="10" y="0" width="6" height="6" rx="1"/><rect x="0" y="10" width="6" height="6" rx="1"/><rect x="10" y="10" width="6" height="6" rx="1"/></svg>Grid
+    </button>
+    <button class="pill" id="pillList" onclick="setView('list')">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>List
+    </button>
+  </div>
+
+  <button class="btn-open" onclick="openFolder()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    Open Folder
+  </button>
+</nav>
+
+<!-- Stats bar -->
+<div id="statsBar">
+  <span class="chip">LIVE</span>
+  <span id="statsText"></span>
+  <span id="folderPath"></span>
+</div>
+
+<!-- Main -->
+<main id="main">
+  <div id="emptyState">
+    <div class="e-glyph">✦</div>
+    <div class="e-title">LivePhoto Viewer</div>
+    <p class="e-sub">Open a folder containing Live Photos — same-name image + video pairs, e.g. <code>IMG_001.jpg</code> + <code>IMG_001.mp4</code></p>
+    <button class="btn-open" onclick="openFolder()" style="margin-top:6px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      Open Folder
+    </button>
+    <p class="e-hint">Or drag & drop a folder anywhere</p>
+  </div>
+  <div id="photoGrid"></div>
+</main>
+
+<!-- Modal -->
+<div id="modal">
+  <div class="modal-wrap">
+    <button id="mClose" onclick="closeModal()">✕</button>
+    <div class="modal-frame">
+      <img id="mImg" src="" alt="">
+    </div>
+    <div class="modal-bar">
+      <span class="m-name" id="mName"></span>
+      <button class="m-btn m-btn-anim" id="mAnimBtn" onclick="toggleModalAnim()">▶ Animate</button>
+      <button class="m-btn m-btn-play" id="mPlayBtn" onclick="openCurrentInPlayer()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><polygon points="5,3 19,12 5,21"/></svg>
+        Open in Player
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* ── Tauri bridge ── */
+const T = typeof window.__TAURI__ !== 'undefined' ? window.__TAURI__ : null;
+const invoke     = T ? (...a) => T.core.invoke(...a) : async () => [];
+const openDialog = T ? (o) => T.dialog.open(o) : async () => null;
+const convertFileSrc = T ? (p) => T.core.convertFileSrc(p) : p => p;
+
+/* ── HTTP server port (for serving extracted frame images) ── */
+let PORT = 0;
+(async () => { if (T) PORT = await invoke('get_server_port'); })();
+
+function toHttpUrl(path) {
+  const norm = path.replace(/\\/g, '/');
+  const abs  = norm.startsWith('/') ? norm : '/' + norm;
+  return 'http://127.0.0.1:' + PORT + abs.split('/').map(encodeURIComponent).join('/');
+}
+
+/* ── State ── */
+let all = [], shown = [], view = 'grid';
+// frameCache: videoPath → string[] (paths) | null (loading) | [] (failed)
+const frameCache = new Map();
+
+let modalPhoto = null, modalAnimating = false, modalTimer = null;
+
+/* ── Chameleon palette ── */
+const PALETTE = ['c0','c1','c2','c3','c4','c5','c6','c7','c8','c9'];
+
+/* ── Open folder ── */
+async function openFolder() {
+  let dir;
+  try { dir = await openDialog({ directory:true, multiple:false, title:'Select Live Photos Folder' }); }
+  catch(e) { toast('Dialog error: '+e,'err'); return; }
+  if (!dir) return;
+  await loadDir(dir);
+}
+
+async function loadDir(dir) {
+  showSkel();
+  try {
+    const photos = await invoke('list_live_photos', { dir });
+    all = photos; shown = photos;
+    $('folderPath').textContent = dir;
+    $('statsBar').style.display = 'flex';
+    $('searchWrap').style.display = 'flex';
+    $('viewPills').style.display = 'flex';
+    renderGrid(photos);
+    updateStats();
+    toast(photos.length ? `Found ${photos.length} Live Photo${photos.length>1?'s':''}` : 'No Live Photos found in this folder', photos.length?'':'err');
+  } catch(e) { toast('Error: '+e,'err'); showEmpty(); }
+}
+
+/* ── Render ── */
+function showSkel() {
+  hide('emptyState');
+  const g = $('photoGrid');
+  g.style.display = 'grid';
+  g.innerHTML = Array(16).fill('<div class="skel"></div>').join('');
+}
+function showEmpty() { $('photoGrid').style.display='none'; show('emptyState'); }
+
+function renderGrid(photos) {
+  const g = $('photoGrid');
+  if (!photos.length) { showEmpty(); return; }
+  hide('emptyState');
+  g.style.display = 'grid';
+  g.innerHTML = photos.map((p,i) => `
+    <div class="card ${PALETTE[i%10]}" data-i="${i}">
+      <img src="${convertFileSrc(p.image_path)}" alt="${esc(p.display_name||p.name)}" loading="lazy" draggable="false">
+      <div class="card-info">
+        <span class="card-name">${esc(p.display_name||p.name)}</span>
+        <span class="live-badge">LIVE</span>
+      </div>
+    </div>`).join('');
+  g.querySelectorAll('.card').forEach(c => {
+    c.addEventListener('mouseenter', onHover);
+    c.addEventListener('mouseleave', onLeave);
+    c.addEventListener('click', onCardClick);
+  });
+}
+
+/* ── Hover: frame animation ── */
+async function onHover(e) {
+  const c = e.currentTarget;
+  const idx = +c.dataset.i;
+  const photo = shown[idx];
+  const img = c.querySelector('img');
+  const origSrc = convertFileSrc(photo.image_path);
+
+  // Generation counter to cancel stale hovers
+  c._gen = (c._gen||0) + 1;
+  const gen = c._gen;
+
+  c.classList.add('loading');
+
+  let frames = frameCache.get(photo.video_path);
+
+  if (frames === undefined) {
+    // Not cached — extract
+    frameCache.set(photo.video_path, null); // mark loading
+    try {
+      const paths = await invoke('extract_video_frames', { videoPath: photo.video_path, frameCount: 12 });
+      frames = paths; // absolute OS paths
+      frameCache.set(photo.video_path, frames);
+    } catch(err) {
+      frameCache.set(photo.video_path, []);
+      frames = [];
+    }
+  } else if (frames === null) {
+    // Another hover is already extracting — wait briefly then check
+    await new Promise(r => setTimeout(r, 800));
+    frames = frameCache.get(photo.video_path) || [];
+  }
+
+  c.classList.remove('loading');
+
+  // If user has already moved away, don't start animation
+  if (gen !== c._gen) return;
+
+  if (!frames.length) return; // extraction failed — just show static photo
+
+  // Start frame cycling
+  let fi = 0;
+  c._timer = setInterval(() => {
+    if (gen !== c._gen) { clearInterval(c._timer); img.src = origSrc; return; }
+    img.src = toHttpUrl(frames[fi % frames.length]);
+    fi++;
+  }, 80); // ~12 fps
+}
+
+function onLeave(e) {
+  const c = e.currentTarget;
+  c._gen = (c._gen||0) + 1; // invalidate
+  clearInterval(c._timer);
+  c.classList.remove('loading');
+  const idx = +c.dataset.i;
+  c.querySelector('img').src = convertFileSrc(shown[idx].image_path);
+}
+
+function onCardClick(e) {
+  const idx = +e.currentTarget.dataset.i;
+  openModal(shown[idx]);
+}
+
+/* ── Modal ── */
+function openModal(photo) {
+  modalPhoto = photo;
+  modalAnimating = false;
+  clearInterval(modalTimer);
+  $('mImg').src = convertFileSrc(photo.image_path);
+  $('mName').textContent = photo.display_name || photo.name;
+  $('mAnimBtn').textContent = '▶ Animate';
+  $('modal').classList.add('open');
+  document.addEventListener('keydown', onKey);
+}
+
+function closeModal() {
+  $('modal').classList.remove('open');
+  clearInterval(modalTimer);
+  modalAnimating = false;
+  modalPhoto = null;
+  document.removeEventListener('keydown', onKey);
+}
+
+function toggleModalAnim() {
+  if (!modalPhoto) return;
+  if (modalAnimating) {
+    // Stop
+    clearInterval(modalTimer);
+    modalAnimating = false;
+    $('mImg').src = convertFileSrc(modalPhoto.image_path);
+    $('mAnimBtn').textContent = '▶ Animate';
+  } else {
+    // Start — get frames (already cached if user hovered)
+    startModalAnim();
+  }
+}
+
+async function startModalAnim() {
+  if (!modalPhoto) return;
+  let frames = frameCache.get(modalPhoto.video_path);
+
+  if (frames === undefined || frames === null) {
+    $('mAnimBtn').textContent = '⏳ Loading…';
+    try {
+      const paths = await invoke('extract_video_frames', { videoPath: modalPhoto.video_path, frameCount: 12 });
+      frames = paths;
+      frameCache.set(modalPhoto.video_path, frames);
+    } catch {
+      frames = [];
+      frameCache.set(modalPhoto.video_path, frames);
+    }
+  }
+
+  if (!frames.length) { toast('Could not extract frames from this video','err'); return; }
+
+  modalAnimating = true;
+  $('mAnimBtn').textContent = '⏸ Stop';
+  let fi = 0;
+  modalTimer = setInterval(() => {
+    if (!modalAnimating) { clearInterval(modalTimer); return; }
+    $('mImg').src = toHttpUrl(frames[fi % frames.length]);
+    fi++;
+  }, 80);
+}
+
+function openCurrentInPlayer() {
+  if (!modalPhoto) return;
+  invoke('open_with_system_player', { path: modalPhoto.video_path })
+    .catch(e => toast('Could not open player: '+e,'err'));
+}
+
+function onKey(e) {
+  if (e.key==='Escape') closeModal();
+  if (e.key===' ') { e.preventDefault(); toggleModalAnim(); }
+}
+$('modal').addEventListener('click', e => { if (e.target===$('modal')) closeModal(); });
+
+/* ── Search ── */
+$('searchInput').addEventListener('input', e => {
+  const q = e.target.value.trim().toLowerCase();
+  shown = q ? all.filter(p => p.name.toLowerCase().includes(q)||p.display_name.toLowerCase().includes(q)) : all;
+  renderGrid(shown);
+  updateStats();
+});
+
+/* ── View toggle ── */
+function setView(v) {
+  view = v;
+  $('pillGrid').classList.toggle('on', v==='grid');
+  $('pillList').classList.toggle('on', v==='list');
+  $('photoGrid').classList.toggle('list-view', v==='list');
+}
+
+/* ── Drag & drop ── */
+document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag'); });
+document.addEventListener('dragleave', e => { if (!document.body.contains(e.relatedTarget)) document.body.classList.remove('drag'); });
+document.addEventListener('drop', async e => {
+  e.preventDefault(); document.body.classList.remove('drag');
+  for (const item of [...e.dataTransfer.items]) {
+    if (item.kind!=='file') continue;
+    const f = item.getAsFile(); if (!f) continue;
+    const p = f.path||f.name;
+    if (p) { await loadDir(p.replace(/[\\/][^\\/]+$/,'')||p); break; }
+  }
+});
+
+/* ── Helpers ── */
+function updateStats() {
+  $('statsText').textContent = shown.length===all.length
+    ? `${all.length} Live Photo${all.length!==1?'s':''}`
+    : `${shown.length} / ${all.length} Live Photos`;
+}
+function toast(msg, type) {
+  const t = document.createElement('div');
+  t.className = 'toast'+(type==='err'?' err':'');
+  t.textContent = msg;
+  $('toasts').appendChild(t);
+  setTimeout(() => { t.style.transition='opacity .3s'; t.style.opacity='0'; }, 2800);
+  setTimeout(() => t.remove(), 3100);
+}
+function $(id) { return document.getElementById(id); }
+function show(id) { $(id).style.display=''; }
+function hide(id) { $(id).style.display='none'; }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+</script>
+</body>
+</html>

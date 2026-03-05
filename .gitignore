@@ -1,0 +1,13 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Rust / Cargo build output
+src-tauri/target/
+
+# Tauri generated bindings (regenerated at build time)
+src-tauri/gen/
+
+# OS
+.DS_Store
+Thumbs.db

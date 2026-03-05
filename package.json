@@ -1,0 +1,13 @@
+{
+  "name": "live-photo-viewer",
+  "version": "0.1.0",
+  "description": "Cross-platform Live Photo viewer for Linux, Windows, and macOS",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
