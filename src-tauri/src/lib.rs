@@ -263,20 +263,42 @@ fn open_with_system_player(path: String) -> Result<(), String> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Embedded motion photo detection and extraction
 //
-// Supports three single-file formats:
+// Single-file (embedded) formats — detection order:
 //
-// 1. Google MicroVideo (old Pixel, MVIMG_*.jpg)
-//    XMP: GCamera:MicroVideo="1", GCamera:MicroVideoOffset=N (from EOF)
-//    Video starts at: file_size - N
+// ① XMP APP1 scan (first 64 KB):
 //
-// 2. Google/Samsung MotionPhoto (new Pixel PXL_*.MP.jpg, modern Samsung)
-//    XMP: GCamera:MotionPhoto="1" or Samsung:MotionPhoto="1"
-//    Container XMP: <Container:Item Item:Mime="video/mp4" Item:Length="N" Item:Padding="P"/>
-//    Video starts at: file_size - N - P
+//   a) Google MicroVideo (old Pixel MVIMG_*.jpg, old Xiaomi)
+//      ns: http://ns.google.com/photos/1.0/camera/
+//      XMP: GCamera:MicroVideo="1", GCamera:MicroVideoOffset=N  (bytes from EOF)
+//      video_start = file_size - N
 //
-// 3. Samsung older (Galaxy S7/S8/S9, MotionPhoto_Data marker)
-//    Binary marker "MotionPhoto_Data" (16 bytes) appended after JPEG FF D9
-//    Video starts immediately after the 16-byte marker
+//   b) Google MotionPhoto / Samsung (new Pixel PXL_*.MP.jpg, modern Samsung,
+//      new Xiaomi HyperOS 3, vivo)
+//      ns: http://ns.google.com/photos/1.0/camera/
+//      XMP: GCamera:MotionPhoto="1"
+//      Container: <Container:Item Item:Mime="video/mp4" Item:Length="N" Item:Padding="P"/>
+//      video_start = file_size - N - P
+//
+//   c) OPPO / OnePlus / Realme (ColorOS / OxygenOS / realme UI)
+//      Standard GCamera:MotionPhoto="1" + Container (same as above)
+//      + proprietary ns: http://ns.oplus.com/photos/1.0/camera/
+//        OLivePhotoVersion="2", MotionPhotoOwner="oplus"
+//      Detected by Container approach; extra oplus namespace → photo_type="oppo"
+//
+// ② Samsung "MotionPhoto_Data" binary marker (Galaxy S7–S9)
+//    ASCII "MotionPhoto_Data" (16 bytes) immediately precedes embedded MP4
+//    video_start = offset_after_marker
+//
+// ③ Huawei / generic ftyp scan (Huawei/Honor pre-GMS-ban, vivo older)
+//    No standard XMP offset — video is directly appended after JPEG data.
+//    Detect by scanning for a valid ISO Base Media ftyp box (size 12-64,
+//    known brand: mp41/mp42/isom/iso2/M4V etc.) from offset 4 KB onward.
+//    video_start = ftyp_box_start  (4 bytes before the "ftyp" text)
+//
+// Separate-file (companion) formats handled in list_live_photos:
+//   HEIC/JPG + .mov         → Apple Live Photo
+//   HEIC/JPG + .mp4/.m4v   → Generic Android / Huawei pair
+//   {stem}_motion.mp4       → Old Samsung
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Try to detect an embedded video in a JPEG file.
@@ -340,42 +362,65 @@ fn jpeg_motion_photo_offset(jpeg_path: &Path) -> Option<(u64, &'static str)> {
     }
 
     // ── Strategy 2: binary scan for Samsung "MotionPhoto_Data" marker ────────
-    find_samsung_marker(jpeg_path, file_size)
+    if let Some(result) = find_samsung_marker(jpeg_path, file_size) {
+        return Some(result);
+    }
+
+    // ── Strategy 3: generic ftyp box scan ────────────────────────────────────
+    // Catches Huawei/Honor (older EMUI, HarmonyOS) and other manufacturers
+    // that append an MP4 after the JPEG data without writing an XMP offset.
+    // Also serves as a fallback when XMP said "MotionPhoto=1" but provided no
+    // parseable Container:Item or MotionPhotoOffset (some older Huawei EMUI
+    // versions adopted the GCamera MotionPhoto XMP flag but omitted the offset).
+    find_ftyp_video_start(jpeg_path, file_size)
 }
 
 /// Parse XMP string for motion photo markers.
 /// Returns (absolute_video_start, photo_type) or None.
 fn parse_xmp_motion(xmp: &str, file_size: u64) -> Option<(u64, &'static str)> {
     // ── Google MicroVideo (old format) ────────────────────────────────────────
-    // XMP: GCamera:MicroVideo="1", GCamera:MicroVideoOffset=N (bytes from EOF)
+    // Used by: old Pixel (MVIMG_*.jpg), old Xiaomi (uses same GCamera namespace)
     let is_micro = xmp.contains("MicroVideo=\"1\"") || xmp.contains("MicroVideo='1'");
     if is_micro {
         if let Some(off) = extract_xmp_u64(xmp, "MicroVideoOffset") {
-            return Some((file_size.saturating_sub(off), "google"));
+            // Xiaomi uses the same XMP fields as old Google — tag by namespace owner
+            let src = if xmp.contains("xiaomi.com") { "xiaomi" } else { "google" };
+            return Some((file_size.saturating_sub(off), src));
         }
     }
 
-    // ── Google MotionPhoto / Samsung MotionPhoto (new Container format) ───────
-    // XMP: GCamera:MotionPhoto="1" or Samsung:MotionPhoto="1"
-    // Container: <Container:Item Item:Mime="video/mp4" Item:Length="N" Item:Padding="P"/>
+    // ── MotionPhoto (new Container format) ───────────────────────────────────
+    // Used by: new Pixel, modern Samsung, Xiaomi HyperOS 3, vivo, OPPO
     let is_motion = xmp.contains("MotionPhoto=\"1\"") || xmp.contains("MotionPhoto='1'");
     if is_motion {
-        let source: &'static str = if xmp.contains("samsung.com") {
+        // Identify source by checking vendor-specific namespace hints
+        let source: &'static str = if xmp.contains("oplus.com") {
+            // OPPO / OnePlus / Realme  — ColorOS / OxygenOS / realme UI
+            // ns: http://ns.oplus.com/photos/1.0/camera/
+            // attributes: OLivePhotoVersion, MotionPhotoOwner="oplus"
+            "oppo"
+        } else if xmp.contains("samsung.com") {
             "samsung"
+        } else if xmp.contains("xiaomi.com") {
+            "xiaomi"
         } else {
             "google"
         };
 
-        // Try Container:Item approach (length of video item from EOF)
+        // Container:Item — <Container:Item Item:Mime="video/mp4" Item:Length="N" Item:Padding="P"/>
         if let Some((length, padding)) = find_container_video_item(xmp) {
             let video_start = file_size.saturating_sub(length + padding);
             return Some((video_start, source));
         }
 
-        // Fallback: try MotionPhotoOffset attribute directly
+        // Direct offset attribute fallback
         if let Some(off) = extract_xmp_u64(xmp, "MotionPhotoOffset") {
             return Some((file_size.saturating_sub(off), source));
         }
+
+        // XMP says it is a motion photo but has no parseable offset.
+        // Signal the caller to fall through to binary ftyp scan (Huawei, etc.)
+        // by returning None here — the outer function will try ftyp next.
     }
 
     None
@@ -444,6 +489,71 @@ fn find_samsung_marker(path: &Path, file_size: u64) -> Option<(u64, &'static str
     None
 }
 
+/// Scan the file for a valid ISO Base Media ftyp box (MP4/MOV container header).
+///
+/// Used as a last-resort fallback for manufacturers that append video directly
+/// after the JPEG data without writing standard XMP offset metadata.
+/// Primary targets: Huawei/Honor (pre-GMS and HarmonyOS older devices).
+///
+/// Scans from 4 KB (past JPEG APP marker area) up to 20 MB.
+/// Returns the absolute offset where the ftyp box starts (video_start).
+fn find_ftyp_video_start(path: &Path, file_size: u64) -> Option<(u64, &'static str)> {
+    // A phone camera JPEG is always several hundred KB; skip small files.
+    if file_size < 64 * 1024 {
+        return None;
+    }
+
+    let scan_size = file_size.min(20 * 1024 * 1024) as usize;
+    let mut f = std::fs::File::open(path).ok()?;
+    let mut buf = vec![0u8; scan_size];
+    let n = f.read(&mut buf).ok()?;
+    let buf = &buf[..n];
+
+    // Skip the first 4 KB to avoid false positives inside JPEG APP segments.
+    // JPEG compressed image data (after SOS) can be large, so the embedded
+    // video realistically starts well past the header.
+    let search_start = 4096usize;
+
+    for i in search_start..buf.len().saturating_sub(8) {
+        if &buf[i..i + 4] != b"ftyp" {
+            continue;
+        }
+        // The 4 bytes before "ftyp" encode the box size (big-endian u32).
+        // A valid ftyp box is 12–64 bytes (type + version + compatible brands).
+        if i < 4 {
+            continue;
+        }
+        let box_size =
+            u32::from_be_bytes([buf[i - 4], buf[i - 3], buf[i - 2], buf[i - 1]]) as usize;
+        if box_size < 12 || box_size > 64 {
+            continue;
+        }
+        // The 4 bytes immediately after "ftyp" are the major brand.
+        let brand = &buf[i + 4..i + 8];
+        if !is_known_mp4_brand(brand) {
+            continue;
+        }
+        // Require the box to be reasonably deep into the file — at least 32 KB
+        // — to avoid matching a thumbnail JPEG embedded within EXIF.
+        let box_start = (i - 4) as u64;
+        if box_start < 32 * 1024 {
+            continue;
+        }
+        return Some((box_start, "huawei"));
+    }
+    None
+}
+
+/// Return true if the 4-byte slice matches a known ISO Base Media ftyp major brand.
+fn is_known_mp4_brand(brand: &[u8]) -> bool {
+    matches!(
+        brand,
+        b"mp41" | b"mp42" | b"isom" | b"iso2" | b"iso4" | b"iso5" | b"iso6"
+            | b"M4V " | b"M4A " | b"avc1" | b"qt  " | b"MSNV" | b"f4v " | b"3gp4"
+            | b"3gp5" | b"3gp6" | b"mmp4" | b"hvc1" | b"HEVC" | b"heic" | b"mif1"
+    )
+}
+
 /// Cache path for the extracted embedded video for a given JPEG.
 fn embedded_video_cache_path(jpeg_path: &str) -> std::path::PathBuf {
     std::env::temp_dir()
@@ -510,7 +620,7 @@ fn list_live_photos(dir: String) -> Result<Vec<LivePhoto>, String> {
             .unwrap_or(0);
         let image_path = file_path.to_string_lossy().into_owned();
 
-        // ── 1. Apple Live Photo: HEIC/JPEG + MOV (separate files) ────────────
+        // ── 1a. Apple Live Photo: HEIC/JPEG + MOV (separate files) ───────────
         let apple_found = ["mov", "MOV"].iter().any(|ve| {
             let vp = file_path.with_extension(ve);
             if vp.exists() {
@@ -531,9 +641,35 @@ fn list_live_photos(dir: String) -> Result<Vec<LivePhoto>, String> {
             continue;
         }
 
-        // ── 2. Generic Android pair: JPG + MP4/M4V (separate files) ──────────
-        // Catches: Xiaomi, OnePlus, Huawei, and other manufacturers that write
-        // a companion MP4 with the same stem.
+        // ── 1b. Huawei/Honor HEIC + MP4 (separate files) ─────────────────────
+        // Huawei devices save HEIC images; their motion video is an .mp4 (not
+        // .mov). Also covers Honor, which shares the same camera software.
+        // We tag these specifically so they display with the right badge.
+        if matches!(ext_lower.as_str(), "heic" | "heif") {
+            let huawei_found = ["mp4", "MP4"].iter().any(|ve| {
+                let vp = file_path.with_extension(ve);
+                if vp.exists() {
+                    photos.push(LivePhoto {
+                        display_name: stem.replace(['_', '-'], " "),
+                        name: stem.clone(),
+                        image_path: image_path.clone(),
+                        video_path: vp.to_string_lossy().into_owned(),
+                        file_size,
+                        photo_type: "huawei".to_string(),
+                    });
+                    true
+                } else {
+                    false
+                }
+            });
+            if huawei_found {
+                continue;
+            }
+        }
+
+        // ── 2. Generic Android pair: JPG/PNG + MP4/M4V (separate files) ──────
+        // Catches: Xiaomi, OnePlus, Huawei (JPG+MP4), OPPO, vivo, and other
+        // manufacturers that write a companion MP4 with the same stem.
         let pair_found = ["mp4", "MP4", "m4v", "M4V"].iter().any(|ve| {
             let vp = file_path.with_extension(ve);
             if vp.exists() {

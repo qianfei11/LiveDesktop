@@ -200,7 +200,7 @@ main::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
   background:var(--a,#a78bfa);color:#fff;flex-shrink:0;
 }
 .live-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
-/* Motion photo badge (Android) — teal/green tones */
+/* Motion photo badges (Android) */
 .motion-badge{
   display:inline-flex;align-items:center;gap:4px;
   font-size:9px;font-weight:800;letter-spacing:.7px;
@@ -208,6 +208,12 @@ main::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
   background:linear-gradient(130deg,#2DD4BF,#4ADE80);color:#fff;flex-shrink:0;
 }
 .motion-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+/* Xiaomi — Mi Orange */
+.motion-badge-xiaomi{background:linear-gradient(130deg,#FF6900,#FFAB40)}
+/* OPPO / OnePlus / Realme — OPPO Green */
+.motion-badge-oppo{background:linear-gradient(130deg,#1B7A4D,#34C578)}
+/* Huawei / Honor — Huawei Red */
+.motion-badge-huawei{background:linear-gradient(130deg,#CF0A2C,#FF4D6D)}
 
 /* loading shimmer on card */
 .card.loading img{filter:brightness(.92)}
@@ -420,7 +426,7 @@ async function loadDir(dir) {
       const parts = [];
       if (liveCount)   parts.push(`${liveCount} Live Photo${liveCount!==1?'s':''}`);
       if (motionCount) parts.push(`${motionCount} Motion Photo${motionCount!==1?'s':''}`);
-      toast('Found ' + parts.join(' + '));
+      toast('Found ' + parts.join(' + ') + brandSummary(photos));
     } else {
       toast('No Live Photos or Motion Photos found in this folder', 'err');
     }
@@ -624,16 +630,30 @@ document.addEventListener('drop', async e => {
 
 /* ── Helpers ── */
 function updateStats() {
-  const total = all.length;
+  const total  = all.length;
   const live   = all.filter(p => p.photo_type === 'live').length;
   const motion = total - live;
   let summary;
-  if (live && motion)       summary = `${live} Live + ${motion} Motion`;
-  else if (live)            summary = `${live} Live Photo${live!==1?'s':''}`;
-  else                      summary = `${motion} Motion Photo${motion!==1?'s':''}`;
+  if (live && motion)  summary = `${live} Live + ${motion} Motion`;
+  else if (live)       summary = `${live} Live Photo${live!==1?'s':''}`;
+  else                 summary = `${motion} Motion Photo${motion!==1?'s':''}`;
   $('statsText').textContent = shown.length === total
     ? summary
     : `${shown.length} / ${total} · ${summary}`;
+}
+
+/* Brand summary line shown in toast only when multiple vendors detected */
+function brandSummary(photos) {
+  const counts = {};
+  const labels = { live:'Apple', google:'Google', samsung:'Samsung',
+                   xiaomi:'Xiaomi', oppo:'OPPO', huawei:'Huawei', motion:'Android' };
+  for (const p of photos) {
+    const k = labels[p.photo_type] || 'Android';
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  const brands = Object.keys(counts);
+  if (brands.length <= 1) return '';
+  return ' (' + brands.map(b => `${counts[b]} ${b}`).join(', ') + ')';
 }
 function toast(msg, type) {
   const t = document.createElement('div');
@@ -654,6 +674,9 @@ function badge(type) {
     case 'live':    return '<span class="live-badge">LIVE</span>';
     case 'google':  return '<span class="motion-badge">MOTION</span>';
     case 'samsung': return '<span class="motion-badge">MOTION</span>';
+    case 'xiaomi':  return '<span class="motion-badge motion-badge-xiaomi">MOTION</span>';
+    case 'oppo':    return '<span class="motion-badge motion-badge-oppo">MOTION</span>';
+    case 'huawei':  return '<span class="motion-badge motion-badge-huawei">MOTION</span>';
     case 'motion':  return '<span class="motion-badge">MOTION</span>';
     default:        return '<span class="live-badge">LIVE</span>';
   }
