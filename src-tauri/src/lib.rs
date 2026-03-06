@@ -25,6 +25,19 @@ pub struct LivePhoto {
     pub photo_type: String,
 }
 
+/// Metadata returned by get_media_info (via ffprobe).
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct MediaInfo {
+    pub vid_width: Option<u32>,
+    pub vid_height: Option<u32>,
+    pub img_width: Option<u32>,
+    pub img_height: Option<u32>,
+    pub duration_secs: Option<f64>,
+    pub created_at: Option<String>,
+    pub make: Option<String>,
+    pub model: Option<String>,
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Local HTTP file server
 // ─────────────────────────────────────────────────────────────────────────────
@@ -179,6 +192,10 @@ fn collect_frames(dir: &Path, max: usize) -> Vec<String> {
 /// Extract `frame_count` evenly-spaced preview frames from `video_path`.
 /// Returns absolute paths to JPEG files (served via the local HTTP server).
 /// Results are cached; repeated calls for the same video return instantly.
+///
+/// Strategy:
+///   1. ffmpeg  — primary (supports HEVC/H.265, AV1, VP9, etc.)
+///   2. gst-launch-1.0 — fallback (requires gstreamer + plugins)
 #[tauri::command]
 fn extract_video_frames(video_path: String, frame_count: u32) -> Result<Vec<String>, String> {
     let cache = frame_cache_dir(&video_path);
@@ -192,8 +209,46 @@ fn extract_video_frames(video_path: String, frame_count: u32) -> Result<Vec<Stri
     std::fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
 
     let pattern = cache.join("f%05d.jpg");
+    let pattern_str = pattern.to_string_lossy().into_owned();
+
+    // ── Strategy 1: ffmpeg ────────────────────────────────────────────────────
+    // Better codec coverage than GStreamer base install (HEVC, AV1, etc.).
+    // -y          : overwrite output without prompting
+    // fps=3       : output 3 frames per second of source material
+    // -q:v 3      : JPEG quality (1=best … 31=worst; 3 ≈ high quality)
+    // -start_number 0 : index frames from 0 (f00000.jpg, f00001.jpg, …)
+    let ffmpeg = if std::path::Path::new("/usr/bin/ffmpeg").exists() {
+        "/usr/bin/ffmpeg"
+    } else {
+        "ffmpeg"
+    };
+
+    if let Ok(_) = std::process::Command::new(ffmpeg)
+        .args([
+            "-y",
+            "-i",
+            &video_path,
+            "-vf",
+            "fps=3",
+            "-q:v",
+            "3",
+            "-start_number",
+            "0",
+            &pattern_str,
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+    {
+        let frames = collect_frames(&cache, frame_count as usize);
+        if !frames.is_empty() {
+            return Ok(frames);
+        }
+    }
+
+    // ── Strategy 2: gst-launch-1.0 fallback ──────────────────────────────────
     let loc_arg = format!("location={}", video_path);
-    let sink_arg = format!("location={}", pattern.to_string_lossy());
+    let sink_arg = format!("location={}", pattern_str);
 
     let gst = if std::path::Path::new("/usr/bin/gst-launch-1.0").exists() {
         "/usr/bin/gst-launch-1.0"
@@ -224,7 +279,7 @@ fn extract_video_frames(video_path: String, frame_count: u32) -> Result<Vec<Stri
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped())
         .output()
-        .map_err(|e| format!("gst-launch-1.0 not found: {e}"))?;
+        .map_err(|e| format!("No decoder available (ffmpeg/gst-launch-1.0 not found): {e}"))?;
 
     let frames = collect_frames(&cache, frame_count as usize);
     if frames.is_empty() {
@@ -429,21 +484,29 @@ fn parse_xmp_motion(xmp: &str, file_size: u64) -> Option<(u64, &'static str)> {
 /// Parse Container:Item elements from XMP to find the video/mp4 item's length and padding.
 /// Returns (Item:Length, Item:Padding).
 fn find_container_video_item(xmp: &str) -> Option<(u64, u64)> {
-    // Find the position of "video/mp4" mime type in a Container:Item element.
-    // XMP looks like:
-    //   <Container:Item Item:Mime="video/mp4" Item:Semantic="MotionPhoto"
-    //                   Item:Length="2929880" Item:Padding="0"/>
-    let mp4_pos = xmp.find("video/mp4")?;
-
-    // Search for Item:Length in a window around the "video/mp4" hit.
-    // The attributes may appear before or after the mime, so use a ±500 char window.
-    let win_start = mp4_pos.saturating_sub(300);
-    let win_end = (mp4_pos + 400).min(xmp.len());
-    let window = &xmp[win_start..win_end];
-
-    let length = extract_xmp_u64(window, "Item:Length")?;
-    let padding = extract_xmp_u64(window, "Item:Padding").unwrap_or(0);
-    Some((length, padding))
+    // Walk every <Container:Item …/> tag and return the length/padding of the
+    // first one whose Mime attribute contains "video/mp4".
+    //
+    // The naive window-search approach was wrong: a preceding image Container:Item
+    //   <Container:Item Item:Mime="image/jpeg" … Item:Length="0" …/>
+    // could fall inside the backward window and poison the length result.
+    let mut rest = xmp;
+    while let Some(tag_start) = rest.find("<Container:Item") {
+        let tag_body = &rest[tag_start..];
+        // Self-closing tags end with "/>"; fall back to ">" for malformed XMP.
+        let tag_end = tag_body
+            .find("/>")
+            .map(|p| p + 2)
+            .or_else(|| tag_body.find(">").map(|p| p + 1))?;
+        let tag = &tag_body[..tag_end];
+        if tag.contains("video/mp4") {
+            let length = extract_xmp_u64(tag, "Item:Length")?;
+            let padding = extract_xmp_u64(tag, "Item:Padding").unwrap_or(0);
+            return Some((length, padding));
+        }
+        rest = &tag_body[tag_end..];
+    }
+    None
 }
 
 /// Extract a u64 value from an XMP attribute like `AttrName="12345"` or `AttrName='12345'`.
@@ -563,11 +626,29 @@ fn embedded_video_cache_path(jpeg_path: &str) -> std::path::PathBuf {
 
 /// Extract the embedded video from a motion photo JPEG to a temp cache file.
 /// Returns the absolute path to the extracted MP4.
+///
+/// Cache validity rules:
+///   - A 0-byte cached file means a previous extraction failed — re-extract.
+///   - If the source JPEG is newer than the cached file, re-extract (handles
+///     test-file regeneration and in-place photo edits).
 fn extract_embedded_video(jpeg_path: &str, video_start: u64) -> Result<String, String> {
     let dst_path = embedded_video_cache_path(jpeg_path);
 
     if dst_path.exists() {
-        return Ok(dst_path.to_string_lossy().into_owned());
+        let dst_size = std::fs::metadata(&dst_path).map(|m| m.len()).unwrap_or(0);
+        let src_newer = {
+            let src_mt = std::fs::metadata(jpeg_path).and_then(|m| m.modified()).ok();
+            let dst_mt = std::fs::metadata(&dst_path).and_then(|m| m.modified()).ok();
+            match (src_mt, dst_mt) {
+                (Some(s), Some(d)) => s > d,
+                _ => false,
+            }
+        };
+        if dst_size > 0 && !src_newer {
+            return Ok(dst_path.to_string_lossy().into_owned());
+        }
+        // Stale or empty cache — remove and re-extract below
+        let _ = std::fs::remove_file(&dst_path);
     }
 
     std::fs::create_dir_all(dst_path.parent().unwrap()).map_err(|e| e.to_string())?;
@@ -577,12 +658,22 @@ fn extract_embedded_video(jpeg_path: &str, video_start: u64) -> Result<String, S
         .len();
     let video_size = file_size.saturating_sub(video_start);
 
+    if video_size == 0 {
+        return Err(format!(
+            "invalid video offset {video_start} >= file size {file_size}"
+        ));
+    }
+
     let mut src = std::fs::File::open(jpeg_path).map_err(|e| e.to_string())?;
     src.seek(SeekFrom::Start(video_start))
         .map_err(|e| e.to_string())?;
 
     let mut dst = std::fs::File::create(&dst_path).map_err(|e| e.to_string())?;
-    stream_bytes(&mut src, &mut dst, video_size).map_err(|e| e.to_string())?;
+    if let Err(e) = stream_bytes(&mut src, &mut dst, video_size) {
+        // Remove the partial file so it is not permanently cached as valid
+        let _ = std::fs::remove_file(&dst_path);
+        return Err(e.to_string());
+    }
 
     Ok(dst_path.to_string_lossy().into_owned())
 }
@@ -591,8 +682,12 @@ fn extract_embedded_video(jpeg_path: &str, video_start: u64) -> Result<String, S
 // Live photo scanner
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Feature 5 — Live photo scanner (with optional recursive traversal)
+// ─────────────────────────────────────────────────────────────────────────────
+
 #[tauri::command]
-fn list_live_photos(dir: String) -> Result<Vec<LivePhoto>, String> {
+fn list_live_photos(dir: String, recursive: bool) -> Result<Vec<LivePhoto>, String> {
     let path = Path::new(&dir);
     if !path.is_dir() {
         return Err(format!("'{dir}' is not a valid directory"));
@@ -600,8 +695,7 @@ fn list_live_photos(dir: String) -> Result<Vec<LivePhoto>, String> {
 
     let mut photos = Vec::new();
 
-    for entry in std::fs::read_dir(path).map_err(|e| e.to_string())?.flatten() {
-        let file_path = entry.path();
+    for file_path in collect_image_files(path, recursive) {
         let Some(ext) = file_path.extension() else {
             continue;
         };
@@ -761,6 +855,217 @@ fn percent_decode(s: &str) -> String {
     out
 }
 
+/// Cache path for the JPEG thumbnail of a HEIC image.
+fn thumbnail_cache_path(image_path: &str) -> std::path::PathBuf {
+    std::env::temp_dir()
+        .join(format!("livephoto_{:016x}", path_hash(image_path)))
+        .join("thumbnail.jpg")
+}
+
+/// Collect all image file paths under `dir`, optionally recursing into sub-directories.
+fn collect_image_files(dir: &Path, recursive: bool) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() && recursive {
+            out.extend(collect_image_files(&path, true));
+        } else if path.is_file() {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .unwrap_or_default();
+            if matches!(ext.as_str(), "jpg" | "jpeg" | "heic" | "heif" | "png") {
+                out.push(path);
+            }
+        }
+    }
+    out
+}
+
+fn ffmpeg_bin() -> &'static str {
+    if std::path::Path::new("/usr/bin/ffmpeg").exists() {
+        "/usr/bin/ffmpeg"
+    } else {
+        "ffmpeg"
+    }
+}
+
+fn ffprobe_bin() -> &'static str {
+    if std::path::Path::new("/usr/bin/ffprobe").exists() {
+        "/usr/bin/ffprobe"
+    } else {
+        "ffprobe"
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feature 2 — HEIC thumbnail generation
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Convert a HEIC/HEIF image to a cached JPEG thumbnail via ffmpeg.
+/// Returns the original path unchanged for JPEG/PNG (browser-native formats).
+#[tauri::command]
+fn get_thumbnail(image_path: String) -> Result<String, String> {
+    let ext = Path::new(&image_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+
+    if !matches!(ext.as_str(), "heic" | "heif") {
+        return Ok(image_path);
+    }
+
+    let dst = thumbnail_cache_path(&image_path);
+    if dst.exists() && std::fs::metadata(&dst).map(|m| m.len()).unwrap_or(0) > 0 {
+        return Ok(dst.to_string_lossy().into_owned());
+    }
+
+    std::fs::create_dir_all(dst.parent().unwrap()).map_err(|e| e.to_string())?;
+
+    std::process::Command::new(ffmpeg_bin())
+        .args([
+            "-y",
+            "-i",
+            &image_path,
+            "-vframes",
+            "1",
+            "-q:v",
+            "3",
+            dst.to_str().unwrap_or(""),
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .map_err(|e| e.to_string())?;
+
+    if dst.exists() && std::fs::metadata(&dst).map(|m| m.len()).unwrap_or(0) > 0 {
+        Ok(dst.to_string_lossy().into_owned())
+    } else {
+        Err(format!("HEIC thumbnail conversion failed for '{image_path}'"))
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feature 3 — Export embedded video
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Copy the video file to a user-chosen destination path.
+#[tauri::command]
+fn save_video(src: String, dst: String) -> Result<(), String> {
+    std::fs::copy(&src, &dst)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Feature 4 — EXIF / media metadata via ffprobe
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn ffprobe_json(path: &str) -> Option<serde_json::Value> {
+    let out = std::process::Command::new(ffprobe_bin())
+        .args([
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            path,
+        ])
+        .output()
+        .ok()?;
+    serde_json::from_slice(&out.stdout).ok()
+}
+
+fn first_tag<'a>(tags: &'a serde_json::Value, keys: &[&str]) -> Option<String> {
+    keys.iter()
+        .find_map(|&k| tags[k].as_str())
+        .map(String::from)
+}
+
+/// Return media metadata for the given image and video files.
+#[tauri::command]
+fn get_media_info(image_path: String, video_path: String) -> Result<MediaInfo, String> {
+    let mut info = MediaInfo::default();
+
+    // ── Video: dimensions, duration, tags ────────────────────────────────────
+    if !video_path.is_empty() {
+        if let Some(json) = ffprobe_json(&video_path) {
+            if let Some(streams) = json["streams"].as_array() {
+                if let Some(vs) = streams
+                    .iter()
+                    .find(|s| s["codec_type"].as_str() == Some("video"))
+                {
+                    info.vid_width = vs["width"].as_u64().map(|v| v as u32);
+                    info.vid_height = vs["height"].as_u64().map(|v| v as u32);
+                    // Some containers store duration per-stream
+                    if info.duration_secs.is_none() {
+                        info.duration_secs = vs["duration"]
+                            .as_str()
+                            .and_then(|d| d.parse::<f64>().ok());
+                    }
+                }
+            }
+            info.duration_secs = info.duration_secs.or_else(|| {
+                json["format"]["duration"]
+                    .as_str()
+                    .and_then(|d| d.parse::<f64>().ok())
+            });
+            let tags = &json["format"]["tags"];
+            info.created_at = first_tag(
+                tags,
+                &[
+                    "creation_time",
+                    "date_time_original",
+                    "DateTimeOriginal",
+                    "com.apple.quicktime.creationdate",
+                ],
+            );
+            info.make = first_tag(
+                tags,
+                &["com.apple.quicktime.make", "make", "Make"],
+            );
+            info.model = first_tag(
+                tags,
+                &["com.apple.quicktime.model", "model", "Model"],
+            );
+        }
+    }
+
+    // ── Image: dimensions + fill missing EXIF tags ────────────────────────────
+    if !image_path.is_empty() {
+        if let Some(json) = ffprobe_json(&image_path) {
+            if let Some(streams) = json["streams"].as_array() {
+                if let Some(vs) = streams
+                    .iter()
+                    .find(|s| s["codec_type"].as_str() == Some("video"))
+                {
+                    info.img_width = vs["width"].as_u64().map(|v| v as u32);
+                    info.img_height = vs["height"].as_u64().map(|v| v as u32);
+                }
+            }
+            let tags = &json["format"]["tags"];
+            if info.created_at.is_none() {
+                info.created_at =
+                    first_tag(tags, &["creation_time", "DateTimeOriginal", "date"]);
+            }
+            if info.make.is_none() {
+                info.make = first_tag(tags, &["make", "Make"]);
+            }
+            if info.model.is_none() {
+                info.model = first_tag(tags, &["model", "Model"]);
+            }
+        }
+    }
+
+    Ok(info)
+}
+
 fn mime_for(path: &str) -> &'static str {
     match path
         .rsplit('.')
@@ -795,7 +1100,10 @@ pub fn run() {
             list_live_photos,
             get_server_port,
             extract_video_frames,
-            open_with_system_player
+            open_with_system_player,
+            get_thumbnail,
+            save_video,
+            get_media_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running LivePhoto Viewer");

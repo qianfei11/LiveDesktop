@@ -18,7 +18,7 @@ html,body{height:100%;overflow:hidden}
   --text3:#a1a1aa;
   --radius:18px;
   --nav-h:58px;
-  --bar-h:38px;
+  --bar-h:42px;
   --shadow:0 2px 12px rgba(80,80,180,.07);
   --shadow-hover:0 16px 48px rgba(80,80,180,.16);
   --trans:.28s cubic-bezier(.34,1.56,.64,1);
@@ -80,6 +80,13 @@ nav{
 .pill{padding:4px 11px;border-radius:7px;font-size:12px;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;display:flex;align-items:center;gap:5px;transition:background .15s,color .15s}
 .pill.on{background:#a78bfa;color:#fff}
 
+/* recursive toggle */
+.rec-label{
+  display:flex;align-items:center;gap:5px;
+  font-size:12px;color:var(--text2);cursor:pointer;white-space:nowrap;
+}
+.rec-label input[type=checkbox]{accent-color:#a78bfa;width:13px;height:13px;cursor:pointer}
+
 /* open button */
 .btn-open{
   display:inline-flex;align-items:center;gap:7px;
@@ -96,12 +103,13 @@ nav{
 
 /* ── Stats bar ── */
 #statsBar{
-  position:relative;z-index:15;height:var(--bar-h);
-  display:none;align-items:center;gap:10px;
-  padding:0 18px;
+  position:relative;z-index:15;
+  display:none;flex-direction:column;gap:6px;
+  padding:7px 18px;
   background:rgba(255,255,255,.7);backdrop-filter:blur(10px);
   border-bottom:1px solid rgba(0,0,0,.05);flex-shrink:0;
 }
+.stats-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .chip{
   display:inline-flex;align-items:center;gap:5px;
   font-size:10px;font-weight:800;letter-spacing:.8px;
@@ -112,6 +120,24 @@ nav{
 @keyframes blink{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.5)}}
 #statsText{font-size:12px;color:var(--text2)}
 #folderPath{font-size:10px;font-family:monospace;color:var(--text3);margin-left:auto;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* sort select */
+.sort-select{
+  font-size:11px;color:var(--text2);background:rgba(0,0,0,.04);
+  border:1.5px solid rgba(0,0,0,.07);border-radius:8px;
+  padding:3px 8px;cursor:pointer;outline:none;
+}
+.sort-select:focus{border-color:#a78bfa}
+
+/* brand filter chips */
+.brand-filter{display:flex;gap:4px;flex-wrap:wrap}
+.brand-chip{
+  font-size:10px;font-weight:700;letter-spacing:.4px;
+  padding:3px 10px;border-radius:20px;cursor:pointer;border:none;
+  background:rgba(0,0,0,.06);color:var(--text2);
+  transition:background .15s,color .15s;
+}
+.brand-chip.on{background:#a78bfa;color:#fff}
 
 /* ── Scroll area ── */
 main{position:relative;z-index:5;flex:1;overflow-y:auto;padding:20px;
@@ -177,7 +203,6 @@ main::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
 .card img{
   position:absolute;inset:0;width:100%;height:100%;
   object-fit:cover;
-  /* leave room for bottom strip */
   bottom:44px;height:calc(100% - 44px);
   transition:transform .5s ease;
 }
@@ -195,19 +220,21 @@ main::-webkit-scrollbar-thumb{background:rgba(0,0,0,.1);border-radius:3px}
 .card-name{font-size:11px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .live-badge{
   display:inline-flex;align-items:center;gap:4px;
-  font-size:9px;font-weight:800;letter-spacing:.7px;
+  font-size:9px;font-weight:800;letter-spacing:.5px;
   padding:3px 8px;border-radius:20px;
   background:var(--a,#a78bfa);color:#fff;flex-shrink:0;
+  white-space:nowrap;
 }
-.live-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+.live-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;flex-shrink:0;animation:blink 1.4s ease-in-out infinite}
 /* Motion photo badges (Android) */
 .motion-badge{
   display:inline-flex;align-items:center;gap:4px;
-  font-size:9px;font-weight:800;letter-spacing:.7px;
+  font-size:9px;font-weight:800;letter-spacing:.5px;
   padding:3px 8px;border-radius:20px;
   background:linear-gradient(130deg,#2DD4BF,#4ADE80);color:#fff;flex-shrink:0;
+  white-space:nowrap;
 }
-.motion-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;animation:blink 1.4s ease-in-out infinite}
+.motion-badge::before{content:'';width:4px;height:4px;border-radius:50%;background:#fff;flex-shrink:0;animation:blink 1.4s ease-in-out infinite}
 /* Xiaomi — Mi Orange */
 .motion-badge-xiaomi{background:linear-gradient(130deg,#FF6900,#FFAB40)}
 /* OPPO / OnePlus / Realme — OPPO Green */
@@ -267,6 +294,11 @@ body.drag::after{
   display:inline-flex;max-width:86vw;max-height:76vh;
 }
 #mImg{display:block;max-width:86vw;max-height:76vh;object-fit:contain;border-radius:16px}
+#mVideo{
+  display:none;max-width:86vw;max-height:76vh;
+  object-fit:contain;border-radius:16px;
+  background:#000;
+}
 
 /* bottom bar */
 .modal-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center}
@@ -276,10 +308,22 @@ body.drag::after{
   padding:7px 16px;border-radius:10px;font-size:12px;font-weight:700;
   cursor:pointer;border:none;transition:all .2s;white-space:nowrap;
 }
-.m-btn-anim{background:rgba(167,139,250,.25);border:1px solid rgba(167,139,250,.5);color:#e0d9ff}
-.m-btn-anim:hover{background:rgba(167,139,250,.45)}
 .m-btn-play{background:linear-gradient(130deg,#a78bfa,#38bdf8);color:#fff;box-shadow:0 3px 14px rgba(167,139,250,.4)}
 .m-btn-play:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(167,139,250,.55)}
+.m-btn-vid{background:rgba(167,139,250,.25);border:1px solid rgba(167,139,250,.5);color:#e0d9ff}
+.m-btn-vid:hover{background:rgba(167,139,250,.45)}
+.m-btn-save{background:rgba(56,189,248,.2);border:1px solid rgba(56,189,248,.4);color:#bae6fd}
+.m-btn-save:hover{background:rgba(56,189,248,.38)}
+
+/* EXIF info panel */
+.modal-info{
+  display:grid;grid-template-columns:auto 1fr;gap:4px 18px;align-items:start;
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;padding:10px 18px;
+  font-size:11px;width:100%;max-width:520px;
+}
+.info-label{color:rgba(255,255,255,.4);font-weight:600;white-space:nowrap}
+.info-val{color:rgba(255,255,255,.75);word-break:break-word}
 
 /* ── Toast ── */
 #toasts{position:fixed;bottom:18px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:8px}
@@ -322,6 +366,12 @@ body.drag::after{
     </button>
   </div>
 
+  <!-- Feature 5: recursive toggle -->
+  <label class="rec-label" id="recLabel" style="display:none">
+    <input type="checkbox" id="recursiveToggle" onchange="recursive=this.checked">
+    Sub-folders
+  </label>
+
   <button class="btn-open" onclick="openFolder()">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
     Open Folder
@@ -330,9 +380,20 @@ body.drag::after{
 
 <!-- Stats bar -->
 <div id="statsBar">
-  <span class="chip">LIVE</span>
-  <span id="statsText"></span>
-  <span id="folderPath"></span>
+  <div class="stats-row">
+    <span class="chip">LIVE</span>
+    <span id="statsText"></span>
+    <!-- Feature 6: sort -->
+    <select class="sort-select" id="sortSelect" onchange="sortKey=this.value;applyFilters()">
+      <option value="name-asc">Name A→Z</option>
+      <option value="name-desc">Name Z→A</option>
+      <option value="size-desc">Largest first</option>
+      <option value="type">By type</option>
+    </select>
+    <span id="folderPath"></span>
+  </div>
+  <!-- Feature 6: brand filter -->
+  <div class="brand-filter" id="brandFilter"></div>
 </div>
 
 <!-- Main -->
@@ -357,16 +418,32 @@ body.drag::after{
 <div id="modal">
   <div class="modal-wrap">
     <button id="mClose" onclick="closeModal()">✕</button>
+
+    <!-- Feature 1: video + image in same frame -->
     <div class="modal-frame">
       <img id="mImg" src="" alt="">
+      <video id="mVideo" loop playsinline></video>
     </div>
+
     <div class="modal-bar">
       <span class="m-name" id="mName"></span>
-      <button class="m-btn m-btn-anim" id="mAnimBtn" onclick="toggleModalAnim()">▶ Animate</button>
-      <button class="m-btn m-btn-play" id="mPlayBtn" onclick="openCurrentInPlayer()">
+      <!-- Feature 1: play video button -->
+      <button class="m-btn m-btn-vid" id="mVidBtn" onclick="toggleModalVideo()">▶ Play Video</button>
+      <!-- Feature 3: save video -->
+      <button class="m-btn m-btn-save" id="mSaveBtn" onclick="saveVideo()">↓ Save Video</button>
+      <button class="m-btn m-btn-play" onclick="openCurrentInPlayer()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><polygon points="5,3 19,12 5,21"/></svg>
         Open in Player
       </button>
+    </div>
+
+    <!-- Feature 4: EXIF info panel -->
+    <div class="modal-info" id="mInfo">
+      <span class="info-label">Date</span>    <span class="info-val" id="infoDate">—</span>
+      <span class="info-label">Camera</span>  <span class="info-val" id="infoCamera">—</span>
+      <span class="info-label">Image</span>   <span class="info-val" id="infoImg">—</span>
+      <span class="info-label">Video</span>   <span class="info-val" id="infoVid">—</span>
+      <span class="info-label">Duration</span><span class="info-val" id="infoDur">—</span>
     </div>
   </div>
 </div>
@@ -376,11 +453,12 @@ body.drag::after{
 <script>
 /* ── Tauri bridge ── */
 const T = typeof window.__TAURI__ !== 'undefined' ? window.__TAURI__ : null;
-const invoke     = T ? (...a) => T.core.invoke(...a) : async () => [];
-const openDialog = T ? (o) => T.dialog.open(o) : async () => null;
+const invoke      = T ? (...a) => T.core.invoke(...a)    : async () => [];
+const openDialog  = T ? (o)   => T.dialog.open(o)       : async () => null;
+const saveDialog  = T ? (o)   => T.dialog.save(o)       : async () => null;
 const convertFileSrc = T ? (p) => T.core.convertFileSrc(p) : p => p;
 
-/* ── HTTP server port (for serving extracted frame images) ── */
+/* ── HTTP server port ── */
 let PORT = 0;
 (async () => { if (T) PORT = await invoke('get_server_port'); })();
 
@@ -392,13 +470,35 @@ function toHttpUrl(path) {
 
 /* ── State ── */
 let all = [], shown = [], view = 'grid';
-// frameCache: videoPath → string[] (paths) | null (loading) | [] (failed)
-const frameCache = new Map();
+let sortKey     = 'name-asc';
+let filterBrand = 'all';
+let recursive   = false;
+let currentDir  = '';
 
-let modalPhoto = null, modalAnimating = false, modalTimer = null;
+// frameCache: videoPath → string[] | null (loading) | [] (failed)
+const frameCache = new Map();
+// infoCache: image_path → MediaInfo
+const infoCache  = new Map();
+
+let modalPhoto = null, modalShowingVideo = false;
 
 /* ── Chameleon palette ── */
 const PALETTE = ['c0','c1','c2','c3','c4','c5','c6','c7','c8','c9'];
+
+/* ── Feature 7: background preload observer ── */
+const preloadObs = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    preloadObs.unobserve(entry.target);
+    const idx = +entry.target.dataset.i;
+    const photo = shown[idx];
+    if (!photo || frameCache.has(photo.video_path)) continue;
+    frameCache.set(photo.video_path, null);
+    invoke('extract_video_frames', { videoPath: photo.video_path, frameCount: 12 })
+      .then(paths => frameCache.set(photo.video_path, paths))
+      .catch(() => frameCache.set(photo.video_path, []));
+  }
+}, { rootMargin: '300px' });
 
 /* ── Open folder ── */
 async function openFolder() {
@@ -410,16 +510,18 @@ async function openFolder() {
 }
 
 async function loadDir(dir) {
+  currentDir = dir;
   showSkel();
   try {
-    const photos = await invoke('list_live_photos', { dir });
+    const photos = await invoke('list_live_photos', { dir, recursive });
     all = photos; shown = photos;
     $('folderPath').textContent = dir;
     $('statsBar').style.display = 'flex';
     $('searchWrap').style.display = 'flex';
-    $('viewPills').style.display = 'flex';
-    renderGrid(photos);
-    updateStats();
+    $('viewPills').style.display  = 'flex';
+    $('recLabel').style.display   = 'flex';
+    applyFilters();
+    renderBrandFilter(photos);
     if (photos.length) {
       const liveCount   = photos.filter(p => p.photo_type === 'live').length;
       const motionCount = photos.length - liveCount;
@@ -428,7 +530,7 @@ async function loadDir(dir) {
       if (motionCount) parts.push(`${motionCount} Motion Photo${motionCount!==1?'s':''}`);
       toast('Found ' + parts.join(' + ') + brandSummary(photos));
     } else {
-      toast('No Live Photos or Motion Photos found in this folder', 'err');
+      toast('No Live Photos or Motion Photos found', 'err');
     }
   } catch(e) { toast('Error: '+e,'err'); showEmpty(); }
 }
@@ -455,11 +557,82 @@ function renderGrid(photos) {
         ${badge(p.photo_type)}
       </div>
     </div>`).join('');
-  g.querySelectorAll('.card').forEach(c => {
+
+  g.querySelectorAll('.card').forEach((c, i) => {
+    const photo = photos[i];
     c.addEventListener('mouseenter', onHover);
     c.addEventListener('mouseleave', onLeave);
     c.addEventListener('click', onCardClick);
+    // Feature 7: background preload
+    preloadObs.observe(c);
+    // Feature 2: HEIC thumbnail
+    if (/\.(heic|heif)$/i.test(photo.image_path)) {
+      loadHeicThumbnail(c, photo);
+    }
   });
+}
+
+/* Feature 2: async HEIC thumbnail */
+async function loadHeicThumbnail(cardEl, photo) {
+  try {
+    const thumbPath = await invoke('get_thumbnail', { imagePath: photo.image_path });
+    const img = cardEl.querySelector('img');
+    if (img) img.src = convertFileSrc(thumbPath);
+  } catch(_) {}
+}
+
+/* ── Feature 6: sort + filter ── */
+function applyFilters() {
+  const q = ($('searchInput')?.value || '').trim().toLowerCase();
+  let result = [...all];
+  if (filterBrand !== 'all') {
+    result = result.filter(p => p.photo_type === filterBrand);
+  }
+  if (q) {
+    result = result.filter(p =>
+      p.name.toLowerCase().includes(q) || p.display_name.toLowerCase().includes(q)
+    );
+  }
+  switch (sortKey) {
+    case 'name-desc': result.sort((a,b)=>b.name.toLowerCase().localeCompare(a.name.toLowerCase())); break;
+    case 'size-desc': result.sort((a,b)=>b.file_size - a.file_size); break;
+    case 'type':      result.sort((a,b)=>a.photo_type.localeCompare(b.photo_type)); break;
+    default:          result.sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+  }
+  shown = result;
+  renderGrid(shown);
+  updateStats();
+}
+
+/* Feature 6: render brand filter chips */
+function renderBrandFilter(photos) {
+  const brandMap = [
+    ['all',     'All'],
+    ['live',    'Apple'],
+    ['google',  'Google'],
+    ['samsung', 'Samsung'],
+    ['xiaomi',  'Xiaomi'],
+    ['oppo',    'OPPO'],
+    ['huawei',  'Huawei'],
+    ['motion',  'Android'],
+  ];
+  const present = new Set(['all', ...photos.map(p => p.photo_type)]);
+  const container = $('brandFilter');
+  container.innerHTML = '';
+  for (const [key, label] of brandMap) {
+    if (!present.has(key)) continue;
+    const chip = document.createElement('button');
+    chip.className = 'brand-chip' + (filterBrand === key ? ' on' : '');
+    chip.textContent = label;
+    chip.dataset.brand = key;
+    chip.onclick = () => {
+      filterBrand = key;
+      container.querySelectorAll('.brand-chip').forEach(c => c.classList.remove('on'));
+      chip.classList.add('on');
+      applyFilters();
+    };
+    container.appendChild(chip);
+  }
 }
 
 /* ── Hover: frame animation ── */
@@ -470,50 +643,40 @@ async function onHover(e) {
   const img = c.querySelector('img');
   const origSrc = convertFileSrc(photo.image_path);
 
-  // Generation counter to cancel stale hovers
   c._gen = (c._gen||0) + 1;
   const gen = c._gen;
-
   c.classList.add('loading');
 
   let frames = frameCache.get(photo.video_path);
-
   if (frames === undefined) {
-    // Not cached — extract
-    frameCache.set(photo.video_path, null); // mark loading
+    frameCache.set(photo.video_path, null);
     try {
-      const paths = await invoke('extract_video_frames', { videoPath: photo.video_path, frameCount: 12 });
-      frames = paths; // absolute OS paths
+      frames = await invoke('extract_video_frames', { videoPath: photo.video_path, frameCount: 12 });
       frameCache.set(photo.video_path, frames);
-    } catch(err) {
+    } catch {
       frameCache.set(photo.video_path, []);
       frames = [];
     }
   } else if (frames === null) {
-    // Another hover is already extracting — wait briefly then check
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 600));
     frames = frameCache.get(photo.video_path) || [];
   }
 
   c.classList.remove('loading');
-
-  // If user has already moved away, don't start animation
   if (gen !== c._gen) return;
+  if (!frames.length) return;
 
-  if (!frames.length) return; // extraction failed — just show static photo
-
-  // Start frame cycling
   let fi = 0;
   c._timer = setInterval(() => {
     if (gen !== c._gen) { clearInterval(c._timer); img.src = origSrc; return; }
     img.src = toHttpUrl(frames[fi % frames.length]);
     fi++;
-  }, 80); // ~12 fps
+  }, 80);
 }
 
 function onLeave(e) {
   const c = e.currentTarget;
-  c._gen = (c._gen||0) + 1; // invalidate
+  c._gen = (c._gen||0) + 1;
   clearInterval(c._timer);
   c.classList.remove('loading');
   const idx = +c.dataset.i;
@@ -528,63 +691,65 @@ function onCardClick(e) {
 /* ── Modal ── */
 function openModal(photo) {
   modalPhoto = photo;
-  modalAnimating = false;
-  clearInterval(modalTimer);
-  $('mImg').src = convertFileSrc(photo.image_path);
+  modalShowingVideo = false;
+
+  const video = $('mVideo');
+  video.pause();
+  video.src = '';
+  video.style.display = 'none';
+  $('mImg').style.display = 'block';
+
+  // Use thumbnail for HEIC
+  let imgSrc = convertFileSrc(photo.image_path);
+  $('mImg').src = imgSrc;
+  if (/\.(heic|heif)$/i.test(photo.image_path)) {
+    invoke('get_thumbnail', { imagePath: photo.image_path })
+      .then(p => { if (modalPhoto === photo) $('mImg').src = convertFileSrc(p); })
+      .catch(() => {});
+  }
+
   $('mName').textContent = photo.display_name || photo.name;
-  $('mAnimBtn').textContent = '▶ Animate';
+  $('mVidBtn').textContent = '▶ Play Video';
   $('modal').classList.add('open');
   document.addEventListener('keydown', onKey);
+
+  // Feature 4: load EXIF info
+  loadMediaInfo(photo);
 }
 
 function closeModal() {
+  const video = $('mVideo');
+  video.pause();
+  video.src = '';
+  video.style.display = 'none';
+  $('mImg').style.display = 'block';
   $('modal').classList.remove('open');
-  clearInterval(modalTimer);
-  modalAnimating = false;
+  modalShowingVideo = false;
   modalPhoto = null;
   document.removeEventListener('keydown', onKey);
 }
 
-function toggleModalAnim() {
+/* Feature 1: toggle between photo and video */
+function toggleModalVideo() {
   if (!modalPhoto) return;
-  if (modalAnimating) {
-    // Stop
-    clearInterval(modalTimer);
-    modalAnimating = false;
-    $('mImg').src = convertFileSrc(modalPhoto.image_path);
-    $('mAnimBtn').textContent = '▶ Animate';
+  const video = $('mVideo');
+  const img   = $('mImg');
+
+  if (!modalShowingVideo) {
+    video.src = toHttpUrl(modalPhoto.video_path);
+    img.style.display   = 'none';
+    video.style.display = 'block';
+    video.play().catch(()=>{});
+    $('mVidBtn').textContent = '📷 Photo';
+    modalShowingVideo = true;
   } else {
-    // Start — get frames (already cached if user hovered)
-    startModalAnim();
+    video.pause();
+    video.src = '';
+    video.style.display = 'none';
+    img.style.display   = 'block';
+    $('mVidBtn').textContent = '▶ Play Video';
+    modalShowingVideo = false;
   }
-}
-
-async function startModalAnim() {
-  if (!modalPhoto) return;
-  let frames = frameCache.get(modalPhoto.video_path);
-
-  if (frames === undefined || frames === null) {
-    $('mAnimBtn').textContent = '⏳ Loading…';
-    try {
-      const paths = await invoke('extract_video_frames', { videoPath: modalPhoto.video_path, frameCount: 12 });
-      frames = paths;
-      frameCache.set(modalPhoto.video_path, frames);
-    } catch {
-      frames = [];
-      frameCache.set(modalPhoto.video_path, frames);
-    }
-  }
-
-  if (!frames.length) { toast('Could not extract frames from this video','err'); return; }
-
-  modalAnimating = true;
-  $('mAnimBtn').textContent = '⏸ Stop';
-  let fi = 0;
-  modalTimer = setInterval(() => {
-    if (!modalAnimating) { clearInterval(modalTimer); return; }
-    $('mImg').src = toHttpUrl(frames[fi % frames.length]);
-    fi++;
-  }, 80);
 }
 
 function openCurrentInPlayer() {
@@ -595,17 +760,84 @@ function openCurrentInPlayer() {
 
 function onKey(e) {
   if (e.key==='Escape') closeModal();
-  if (e.key===' ') { e.preventDefault(); toggleModalAnim(); }
+  if (e.key===' ') { e.preventDefault(); toggleModalVideo(); }
 }
 $('modal').addEventListener('click', e => { if (e.target===$('modal')) closeModal(); });
 
+/* ── Feature 3: save video ── */
+async function saveVideo() {
+  if (!modalPhoto) return;
+  const ext = modalPhoto.video_path.split('.').pop()?.toLowerCase() || 'mp4';
+  let dst;
+  try {
+    dst = await saveDialog({
+      title: 'Save Video',
+      defaultPath: modalPhoto.name + '.' + ext,
+      filters: [{ name: 'Video', extensions: ['mp4','mov','m4v'] }],
+    });
+  } catch(e) { toast('Dialog error: '+e,'err'); return; }
+  if (!dst) return;
+  try {
+    await invoke('save_video', { src: modalPhoto.video_path, dst });
+    toast('Video saved');
+  } catch(e) {
+    toast('Save failed: '+e,'err');
+  }
+}
+
+/* ── Feature 4: EXIF / media info panel ── */
+async function loadMediaInfo(photo) {
+  // Reset to dashes while loading
+  ['infoDate','infoCamera','infoImg','infoVid','infoDur'].forEach(id => $(id).textContent = '—');
+
+  const key = photo.image_path;
+  let info = infoCache.get(key);
+  if (!info) {
+    try {
+      info = await invoke('get_media_info', {
+        imagePath: photo.image_path,
+        videoPath: photo.video_path,
+      });
+      infoCache.set(key, info);
+    } catch { return; }
+  }
+  if (modalPhoto !== photo) return; // modal changed while loading
+
+  if (info.created_at) $('infoDate').textContent = fmtDate(info.created_at);
+  const cam = [info.make, info.model].filter(Boolean).join(' ');
+  if (cam) $('infoCamera').textContent = cam;
+  if (info.img_width && info.img_height)
+    $('infoImg').textContent = `${info.img_width} × ${info.img_height}`;
+  if (info.vid_width && info.vid_height) {
+    let s = `${info.vid_width} × ${info.vid_height}`;
+    if (info.duration_secs != null) s += '  ' + fmtDur(info.duration_secs);
+    $('infoVid').textContent = s;
+  }
+  if (info.duration_secs != null) $('infoDur').textContent = fmtDur(info.duration_secs);
+}
+
+function fmtDate(s) {
+  try {
+    const d = new Date(s);
+    if (isNaN(d)) return s;
+    return d.toLocaleString(undefined, {
+      year:'numeric', month:'short', day:'numeric',
+      hour:'2-digit', minute:'2-digit',
+    });
+  } catch { return s; }
+}
+
+function fmtDur(secs) {
+  const s = Math.round(secs);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}:${pad(m%60)}:${pad(s%60)}`;
+  return `${m}:${pad(s%60)}`;
+}
+function pad(n) { return String(n).padStart(2,'0'); }
+
 /* ── Search ── */
-$('searchInput').addEventListener('input', e => {
-  const q = e.target.value.trim().toLowerCase();
-  shown = q ? all.filter(p => p.name.toLowerCase().includes(q)||p.display_name.toLowerCase().includes(q)) : all;
-  renderGrid(shown);
-  updateStats();
-});
+$('searchInput').addEventListener('input', () => applyFilters());
 
 /* ── View toggle ── */
 function setView(v) {
@@ -642,7 +874,6 @@ function updateStats() {
     : `${shown.length} / ${total} · ${summary}`;
 }
 
-/* Brand summary line shown in toast only when multiple vendors detected */
 function brandSummary(photos) {
   const counts = {};
   const labels = { live:'Apple', google:'Google', samsung:'Samsung',
@@ -655,6 +886,7 @@ function brandSummary(photos) {
   if (brands.length <= 1) return '';
   return ' (' + brands.map(b => `${counts[b]} ${b}`).join(', ') + ')';
 }
+
 function toast(msg, type) {
   const t = document.createElement('div');
   t.className = 'toast'+(type==='err'?' err':'');
@@ -668,16 +900,16 @@ function show(id) { $(id).style.display=''; }
 function hide(id) { $(id).style.display='none'; }
 function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
 
-/* Return the appropriate badge HTML based on photo_type */
+/* Return badge HTML based on photo_type */
 function badge(type) {
   switch (type) {
-    case 'live':    return '<span class="live-badge">LIVE</span>';
-    case 'google':  return '<span class="motion-badge">MOTION</span>';
-    case 'samsung': return '<span class="motion-badge">MOTION</span>';
-    case 'xiaomi':  return '<span class="motion-badge motion-badge-xiaomi">MOTION</span>';
-    case 'oppo':    return '<span class="motion-badge motion-badge-oppo">MOTION</span>';
-    case 'huawei':  return '<span class="motion-badge motion-badge-huawei">MOTION</span>';
-    case 'motion':  return '<span class="motion-badge">MOTION</span>';
+    case 'live':    return '<span class="live-badge">LIVE · Apple</span>';
+    case 'google':  return '<span class="motion-badge">MOTION · Google</span>';
+    case 'samsung': return '<span class="motion-badge">MOTION · Samsung</span>';
+    case 'xiaomi':  return '<span class="motion-badge motion-badge-xiaomi">MOTION · Xiaomi</span>';
+    case 'oppo':    return '<span class="motion-badge motion-badge-oppo">MOTION · OPPO</span>';
+    case 'huawei':  return '<span class="motion-badge motion-badge-huawei">MOTION · Huawei</span>';
+    case 'motion':  return '<span class="motion-badge">MOTION · Android</span>';
     default:        return '<span class="live-badge">LIVE</span>';
   }
 }

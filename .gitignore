@@ -11,3 +11,7 @@ src-tauri/gen/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test photos
+test_photos/
+gen_test_photos.py
