@@ -61,7 +61,51 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'LivePhoto Viewer ${{ github.ref_name }}'
           releaseBody: |
-            Download the installer for your platform below.
+            ## LivePhoto Viewer ${{ github.ref_name }}
+
+            First stable release of LivePhoto Viewer — a cross-platform app for browsing and playing Apple Live Photos (and compatible motion photos) on Linux, Windows, and macOS.
+
+            ### Features
+
+            - **Hover preview**: Hover over a photo card to instantly play the paired video clip
+            - **Fullscreen lightbox**: Click any card to enter fullscreen; `Space` to toggle playback, `Esc` to exit
+            - **Inline video playback**: Play videos directly inside the lightbox with full controls
+            - **Folder selection**: Choose a folder via dialog or drag-and-drop a folder into the window
+            - **Recursive scan**: Automatically scans all subfolders for Live Photos
+            - **Real-time search**: Filter photos by filename instantly
+            - **Sort & filter**: Sort by name or date; filter by media type
+            - **Dual view modes**: Toggle between grid view and compact list view
+            - **HEIC thumbnail support**: Renders HEIC/HEIF image thumbnails natively
+            - **EXIF panel**: View embedded metadata (date, camera model, GPS, etc.)
+            - **Save video clip**: Export the paired video from any Live Photo
+            - **Background preload**: Videos preload in the background for smooth playback
+            - **Dark glassmorphism UI**: Frosted-glass aesthetic with dynamic backgrounds
+
+            ### Supported Formats
+
+            | Image | Video |
+            |-------|-------|
+            | `.jpg` / `.jpeg` | `.mov` / `.MOV` |
+            | `.heic` / `.heif` | `.mp4` / `.MP4` |
+            | `.png` | `.m4v` / `.M4V` |
+
+            Files with the same base name (e.g. `IMG_001.jpg` + `IMG_001.mov`) are automatically paired as a Live Photo. Compatible with Apple, Huawei/Honor, OPPO, and Xiaomi motion photo formats.
+
+            ### Downloads
+
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | **Linux** | `.deb` | Debian / Ubuntu |
+            | **Linux** | `.AppImage` | Universal, no install needed |
+            | **Linux** | `.rpm` | Fedora / RHEL |
+            | **macOS** | `.dmg` | Universal binary (Intel + Apple Silicon) |
+            | **Windows** | `.msi` | Recommended installer |
+            | **Windows** | `.exe` | NSIS installer |
+
+            ### Tech Stack
+
+            - [Tauri v2](https://tauri.app/) — Rust backend + web frontend
+            - Pure HTML / CSS / JS frontend, no extra build step required
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
